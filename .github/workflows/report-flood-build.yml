@@ -107,17 +107,14 @@ jobs:
           merge-multiple: true
 
       - name: Point package.json at the patched packages
-        run: node scripts/apply-patched-deps.mjs
+        run: node scripts/apply-patched-deps.mjs && grep -c '"@zwave-js/server"' package.json
 
-      - name: Install dependencies (pnpm)
-        run: |
-          corepack enable
-          cat pnpm-workspace.yaml
-          corepack pnpm install --no-frozen-lockfile --config.strict-dep-builds=false || corepack pnpm install --no-frozen-lockfile
+      - name: Install dependencies (npm)
+        run: npm install --no-package-lock
 
       - name: Build server bundle and assert schema 53
         run: |
-          corepack pnpm run build:server
+          npm run build:server
           grep -E "maxSchemaVersion = 53|maxSchemaVersion.*53" api/build/lib/const.js || {
             echo "schema 53 marker missing"; exit 1; }
 

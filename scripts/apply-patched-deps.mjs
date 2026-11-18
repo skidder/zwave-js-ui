@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * Writes pnpm overrides into pnpm-workspace.yaml so zwave-js, the internal
+ * Writes npm "overrides" into package.json so zwave-js, the internal
  * @zwave-js/* packages and @zwave-js/server resolve to the patched packages
- * in ./vendor instead of the npm registry. pnpm >= 10 ignores the "pnpm"
- * field in package.json; overrides live in pnpm-workspace.yaml.
+ * in ./vendor instead of the npm registry. This repo is npm-based
+ * (package-lock.json); npm supports local overrides via the "overrides".
  *
  * Usage: node scripts/apply-patched-deps.mjs
  * Layout expected: vendor/<sanitized-name>/package.json
@@ -20,7 +20,7 @@ for (const entry of readdirSync(vendorDir)) {
 	try {
 		const pkg = JSON.parse(readFileSync(pkgJsonPath, "utf8"));
 		if (!pkg.name || !pkg.version) continue;
-		overrides[pkg.name] = "link:" + join(vendorDir, entry);
+		overrides[pkg.name] = "file:" + join("vendor", entry);
 		count++;
 		console.log("override " + pkg.name + "@" + pkg.version + " -> " + overrides[pkg.name]);
 	} catch {
@@ -33,25 +33,8 @@ if (count === 0) {
 	process.exit(1);
 }
 
-const wsPath = join(process.cwd(), "pnpm-workspace.yaml");
-let ws;
-if (existsSync(wsPath)) {
-	ws = readFileSync(wsPath, "utf8");
-	if (!ws.endsWith("\n")) ws += "\n";
-} else {
-	ws = "packages:\n  - 'api/*'\n";
-}
-
-// Drop any previous overrides block, then prepend a fresh one
-ws = ws.replace(/^overrides:\n(?:[ \t].*\n?)*/m, "");
-let block = "overrides:\n";
-for (const name of Object.keys(overrides)) {
-	block += "  '" + name + "': '" + overrides[name] + "'\n";
-}
-block += "onlyBuiltDependencies:\n";
-// dependencies with postinstall scripts that pnpm must be allowed to build
-for (const name of ["esbuild", "@serialport/bindings-cpp", "docsify", "vue-demi"]) {
-	block += "  - '" + name + "'\n";
-}
-writeFileSync(wsPath, block + "\n" + ws);
-console.log("Wrote " + count + " overrides into pnpm-workspace.yaml");
+const pkgPath = join(process.cwd(), "package.json");
+const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+pkg.overrides = Object.assign({}, pkg.overrides ?? {}, overrides);
+writeFileSync(pkgPath, JSON.stringify(pkg, null, "\t") + "\n");
+console.log("Wrote " + count + " npm overrides into package.json");
