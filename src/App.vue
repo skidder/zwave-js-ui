@@ -852,6 +852,8 @@ export default {
 			'updateNode',
 			'removeNode',
 			'setZnifferState',
+			'initMaintenanceFindings',
+			'onMaintenanceFinding',
 		]),
 		copyVersion() {
 			const el = document.createElement('textarea')
@@ -1326,6 +1328,10 @@ export default {
 			// convert node values in array
 			this.initNodes(data.nodes)
 
+			// Maintenance (report flood) findings: absent against older
+			// drivers/servers, in which case the state stays empty
+			this.initMaintenanceFindings(data.maintenanceFindings)
+
 			// Handle debug capture state persistence — only update when
 			// explicitly provided (server-pushed inits from ZwaveClient
 			// don't include this field, so avoid resetting it to undefined)
@@ -1501,6 +1507,11 @@ export default {
 			this.socket.on(
 				socketEvents.otwFirmwareUpdate,
 				this.onOTWFirmwareUpdate.bind(this),
+			)
+
+			this.socket.on(
+				socketEvents.maintenanceFinding,
+				this.onMaintenanceFinding.bind(this),
 			)
 			// don't await this, will cause a loop of calls
 			this.getConfig()

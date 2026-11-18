@@ -43,6 +43,7 @@
 					</v-col>
 				</v-row>
 			</v-expand-transition>
+			<maintenance-alert :socket="socket"></maintenance-alert>
 			<nodes-table
 				v-if="!compact"
 				class="pb-8"
@@ -113,6 +114,9 @@ export default {
 		),
 		BaseFab: defineAsyncComponent(
 			() => import('@/components/custom/BaseFab.vue'),
+		),
+		MaintenanceAlert: defineAsyncComponent(
+			() => import('@/components/custom/MaintenanceAlert.vue'),
 		),
 	},
 	computed: {
