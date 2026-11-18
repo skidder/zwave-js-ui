@@ -120,6 +120,8 @@ jobs:
       - name: Build server bundle and assert schema 53
         run: |
           grep '"typescript"' package.json
+          # TS5011: make the implicit rootDir inference explicit
+          node -e "const fs=require('fs');const t=JSON.parse(fs.readFileSync('tsconfig.json','utf8'));t.compilerOptions.rootDir='api';fs.writeFileSync('tsconfig.json',JSON.stringify(t,null,2))"
           npm run build:server
           grep -E "maxSchemaVersion = 53|maxSchemaVersion.*53" api/build/lib/const.js || {
             echo "schema 53 marker missing"; exit 1; }
