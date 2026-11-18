@@ -125,7 +125,7 @@ jobs:
           grep -m2 rootDir tsconfig.json
           npm run build:server
           # the patched server must actually be the one linked: check its built const
-          for f in vendor/@zwave-js_server/build/lib/const.js server/lib/const.js; do
+          for f in vendor/@zwave-js_server/dist-esm/lib/const.js server/lib/const.js; do
             [ -f "$f" ] || continue
             grep -E "maxSchemaVersion = 53|maxSchemaVersion.*53" "$f" && found=1
           done
