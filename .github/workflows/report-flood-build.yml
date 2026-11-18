@@ -113,8 +113,7 @@ jobs:
       - name: Install dependencies (npm)
         run: |
           npm install --no-package-lock
-          # pin toolchain versions to the lockfile so TS semantics match upstream CI
-          npm install --no-save --no-package-lock typescript@5.9.3
+          npx tsc --version
 
       - name: Build server bundle and assert schema 53
         run: |

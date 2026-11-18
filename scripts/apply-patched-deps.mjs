@@ -47,6 +47,10 @@ for (const [name, target] of Object.entries(direct)) {
 	if (rootPkg.dependencies && name in rootPkg.dependencies) rootPkg.dependencies[name] = target;
 	else if (rootPkg.devDependencies && name in rootPkg.devDependencies) rootPkg.devDependencies[name] = target;
 }
+// pin the toolchain to the lockfile version: TS 6 changes rootDir inference
+if (rootPkg.devDependencies && rootPkg.devDependencies.typescript) {
+	rootPkg.devDependencies.typescript = "5.9.3";
+}
 rootPkg.overrides = Object.assign({}, rootPkg.overrides ?? {}, overrides);
 writeFileSync(pkgPath, JSON.stringify(rootPkg, null, "\t") + "\n");
 // npm does not apply "overrides" inside file: dependency subtrees, so
