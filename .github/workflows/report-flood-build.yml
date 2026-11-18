@@ -1,16 +1,98 @@
 name: Report-flood image build
 
-# Fork-only workflow: builds and pushes the report-flood-ui branch image to
-# the fork's GHCR namespace and Docker Hub. Not intended for upstream
-# contribution.
+# Fork-only workflow: builds the report-flood-ui branch against the patched
+# driver (skidder/zwave-js report-flood-monitor) and server
+# (skidder/zwave-js-server report-flood-forwarding) and pushes the image to
+# the fork's GHCR and Docker Hub. Not intended for upstream contribution.
 on:
   push:
     branches:
       - report-flood-ui
   workflow_dispatch:
 
+env:
+  DRIVER_REF: report-flood-monitor
+  SERVER_REF: report-flood-forwarding
+
 jobs:
-  build-push:
+  build-deps:
+    runs-on: ubuntu-latest
+    outputs:
+      key: ${{ steps.shas.outputs.key }}
+    steps:
+      - name: Resolve fork branch SHAs
+        id: shas
+        run: |
+          DRIVER_SHA=$(git ls-remote https://github.com/skidder/zwave-js.git refs/heads/$DRIVER_REF | cut -f1)
+          SERVER_SHA=$(git ls-remote https://github.com/skidder/zwave-js-server.git refs/heads/$SERVER_REF | cut -f1)
+          echo "driver=$DRIVER_SHA" >> "$GITHUB_OUTPUT"
+          echo "server=$SERVER_SHA" >> "$GITHUB_OUTPUT"
+          echo "key=$DRIVER_SHA-$SERVER_SHA" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        id: vendor-cache
+        with:
+          path: vendor
+          key: vendor-${{ steps.shas.outputs.key }}
+
+      - name: Checkout patched driver
+        if: steps.vendor-cache.outputs.cache-hit != 'true'
+        uses: actions/checkout@v5
+        with:
+          repository: skidder/zwave-js
+          ref: ${{ env.DRIVER_REF }}
+          path: zwave-js
+
+      - name: Build and pack zwave-js packages
+        if: steps.vendor-cache.outputs.cache-hit != 'true'
+        working-directory: zwave-js
+        run: |
+          corepack enable
+          corepack yarn install --immutable
+          corepack yarn build
+          corepack yarn workspaces foreach -A pack --out ../../vendor/%s/
+
+      - name: Checkout patched server
+        if: steps.vendor-cache.outputs.cache-hit != 'true'
+        uses: actions/checkout@v5
+        with:
+          repository: skidder/zwave-js-server
+          ref: ${{ env.SERVER_REF }}
+          path: zwave-js-server
+
+      - name: Build and pack the server
+        if: steps.vendor-cache.outputs.cache-hit != 'true'
+        working-directory: zwave-js-server
+        run: |
+          corepack enable
+          corepack yarn install --immutable
+          corepack yarn build
+          mkdir -p ../../vendor/zwave-js-server
+          corepack yarn pack --out ../../vendor/zwave-js-server/zwave-js-server.tgz
+
+      - name: Extract tarballs into package dirs
+        if: steps.vendor-cache.outputs.cache-hit != 'true'
+        working-directory: vendor
+        run: |
+          # normalize: every tgz becomes vendor/<name>/ with package.json at root
+          ls
+          for tgz in $(find . -name '*.tgz'); do
+            d=$(dirname "$tgz")
+            mkdir -p "$d/_x" && tar -xzf "$tgz" -C "$d/_x"
+            name=$(node -p "require('./$d/_x/package.json').name" | tr '/' '_')
+            rm -rf "$d/_x" "$tgz"
+            mv "$d" "../vendor/$name" 2>/dev/null || true
+          done
+          find . -maxdepth 2 -name package.json
+
+      - name: Upload vendor packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: vendor-${{ steps.shas.outputs.key }}
+          path: vendor
+
+  build-image:
+    needs: build-deps
     permissions:
       contents: read
       packages: write
@@ -18,9 +100,26 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: docker/setup-buildx-action@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: vendor-*
+          path: vendor
 
-      # Needed to cross-build the ARM platforms on the amd64 runner
+      - name: Point package.json at the patched packages
+        run: node scripts/apply-patched-deps.mjs
+
+      - name: Install dependencies (pnpm)
+        run: |
+          corepack enable
+          corepack pnpm install --no-frozen-lockfile
+
+      - name: Build server bundle and assert schema 53
+        run: |
+          corepack pnpm run build:server
+          grep -E "maxSchemaVersion = 53|maxSchemaVersion.*53" api/build/lib/const.js || {
+            echo "schema 53 marker missing"; exit 1; }
+
+      - uses: docker/setup-buildx-action@v4
       - uses: docker/setup-qemu-action@v4
 
       - name: Log in to GHCR
