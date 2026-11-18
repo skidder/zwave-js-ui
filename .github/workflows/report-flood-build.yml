@@ -70,6 +70,7 @@ jobs:
           corepack yarn install --immutable
           corepack yarn build
           corepack yarn pack --out "$GITHUB_WORKSPACE/vendor-src/zwave-js-server.tgz"
+          ls -la "$GITHUB_WORKSPACE/vendor-src"
 
       - name: Normalize tarballs into vendor/<name> dirs
         if: steps.vendor-cache.outputs.cache-hit != 'true'

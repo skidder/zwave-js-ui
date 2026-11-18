@@ -15,16 +15,22 @@ const vendorDir = "vendor";
 const overrides = {};
 let count = 0;
 
-const rootPkg = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf8"));
+const pkgPath = join(process.cwd(), "package.json");
+const rootPkg = JSON.parse(readFileSync(pkgPath, "utf8"));
 const directDeps = Object.assign({}, rootPkg.dependencies ?? {}, rootPkg.devDependencies ?? {});
+const direct = {};
 for (const entry of readdirSync(vendorDir)) {
 	const pkgJsonPath = join(vendorDir, entry, "package.json");
 	try {
 		const pkg = JSON.parse(readFileSync(pkgJsonPath, "utf8"));
 		if (!pkg.name || !pkg.version) continue;
-		// npm requires name@version keys when overriding a direct dependency
-		const key = pkg.name in directDeps ? pkg.name + "@" + pkg.version : pkg.name;
-		overrides[key] = "file:" + join("vendor", entry);
+		// npm forbids overriding direct deps via "overrides": rewrite the
+		// dependency spec itself instead; transitives go through overrides
+		if (pkg.name in directDeps) {
+			direct[pkg.name] = "file:" + join("vendor", entry);
+		} else {
+			overrides[pkg.name] = "file:" + join("vendor", entry);
+		}
 		count++;
 		console.log("override " + key + " -> " + overrides[key]);
 	} catch {
@@ -37,8 +43,10 @@ if (count === 0) {
 	process.exit(1);
 }
 
-const pkgPath = join(process.cwd(), "package.json");
-const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
-pkg.overrides = Object.assign({}, pkg.overrides ?? {}, overrides);
-writeFileSync(pkgPath, JSON.stringify(pkg, null, "\t") + "\n");
+for (const [name, target] of Object.entries(direct)) {
+	if (rootPkg.dependencies && name in rootPkg.dependencies) rootPkg.dependencies[name] = target;
+	else if (rootPkg.devDependencies && name in rootPkg.devDependencies) rootPkg.devDependencies[name] = target;
+}
+rootPkg.overrides = Object.assign({}, rootPkg.overrides ?? {}, overrides);
+writeFileSync(pkgPath, JSON.stringify(rootPkg, null, "\t") + "\n");
 console.log("Wrote " + count + " npm overrides into package.json");
