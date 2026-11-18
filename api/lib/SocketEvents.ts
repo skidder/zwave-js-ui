@@ -23,6 +23,7 @@ export const socketEvents = {
 	znifferState: 'ZNIFFER_STATE',
 	linkReliability: 'LINK_RELIABILITY',
 	otwFirmwareUpdate: 'OTW_FIRMWARE_UPDATE',
+	maintenanceFinding: 'MAINTENANCE_FINDING',
 } as const
 export type socketEvents = (typeof socketEvents)[keyof typeof socketEvents]
 
@@ -44,6 +45,7 @@ export const channelMap: Record<string, socketEvents[]> = {
 		socketEvents.controller,
 		socketEvents.connected,
 		socketEvents.info,
+		socketEvents.maintenanceFinding,
 	],
 	nodes: [
 		socketEvents.nodeFound,

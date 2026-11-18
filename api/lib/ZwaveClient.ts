@@ -154,6 +154,10 @@ import { serverVersion, ZwavejsServer } from '@zwave-js/server'
 import type { Server as SocketServer } from 'socket.io'
 import { TypedEventEmitter } from './EventEmitter.ts'
 import type { GatewayValue } from './Gateway.ts'
+import {
+	type MaintenanceFinding,
+	driverSupportsMaintenanceFindings,
+} from './Maintenance.ts'
 
 import type { DeviceConfig } from '@zwave-js/config'
 import { ConfigManager } from '@zwave-js/config'
@@ -324,6 +328,9 @@ export const allowedApis = validateMethods([
 	'accessControlCancelCredentialLearn',
 	'accessControlGetAdminCode',
 	'accessControlSetAdminCode',
+	'getMaintenanceFindings',
+	'applyMaintenanceSuggestion',
+	'isHomeAssistantAttached',
 ] as const)
 
 export type ZwaveNodeEvents = ZWaveNodeEvents | 'statistics updated'
@@ -1533,7 +1540,71 @@ class ZwaveClient extends TypedEventEmitter<ZwaveClientEventCallbacks> {
 			error: this.error,
 			cntStatus: this.cntStatus,
 			inclusionState: this._inclusionState,
+			// Empty against drivers that predate the report flood monitor;
+			// older browsers ignore the field entirely
+			maintenanceFindings: this.getMaintenanceFindings(),
 		}
+	}
+
+	/**
+	 * The active maintenance (report flood) findings. Always an array -
+	 * drivers without the report flood monitor report no findings.
+	 */
+	getMaintenanceFindings(): MaintenanceFinding[] {
+		const impl = this._driver as {
+			getMaintenanceFindings?: () => readonly MaintenanceFinding[]
+		}
+		if (typeof impl?.getMaintenanceFindings !== 'function') return []
+		return [...(impl.getMaintenanceFindings() ?? [])]
+	}
+
+	/**
+	 * Applies the suggested configuration changes for one node of a
+	 * maintenance finding. This is the only write path and it is always
+	 * an explicit user action - nothing is ever applied automatically.
+	 * The verification verdicts arrive afterwards through
+	 * `maintenance finding updated` events.
+	 */
+	async applyMaintenanceSuggestion(
+		findingId: string,
+		nodeId: number,
+	): Promise<void> {
+		const impl = this._driver as {
+			applyMaintenanceSuggestion?: (
+				findingId: string,
+				nodeId: number,
+			) => Promise<void>
+		}
+		if (typeof impl?.applyMaintenanceSuggestion !== 'function') {
+			throw new Error(
+				'The connected driver version does not support maintenance findings',
+			)
+		}
+		await impl.applyMaintenanceSuggestion(findingId, nodeId)
+	}
+
+	/**
+	 * Whether a Home Assistant client is currently attached to the
+	 * embedded zwave-js-server. Home Assistant identifies itself through
+	 * `additionalUserAgentComponents` when it connects. When it is
+	 * attached, the UI defers the fix to Home Assistant's Repairs.
+	 */
+	isHomeAssistantAttached(): boolean {
+		const clients = (
+			this.server as unknown as {
+				clientsController?: {
+					clients?: {
+						additionalUserAgentComponents?: Record<string, string>
+					}[]
+				}
+			}
+		)?.clientsController?.clients
+
+		return (clients ?? []).some((client) =>
+			Object.keys(client?.additionalUserAgentComponents ?? {}).some(
+				(key) => /home[\s_-]?assistant/i.test(key),
+			),
+		)
 	}
 
 	// ---------------- Access Control (User Credential CC / User Code CC) ----------------
@@ -3199,6 +3270,39 @@ class ZwaveClient extends TypedEventEmitter<ZwaveClientEventCallbacks> {
 				'firmware update finished',
 				this._onOTWFirmwareUpdateFinished.bind(this),
 			)
+
+			// Maintenance (report flood) findings. The driver only emits
+			// these when it supports the report flood monitor; against an
+			// older driver (or an older embedded zwave-js-server, schema
+			// version < 53) the UI stays silent and shows nothing.
+			// The released zwave-js typings predate the report flood
+			// monitor, so the events are bound through the plain
+			// EventEmitter API - like the server does.
+			if (driverSupportsMaintenanceFindings(this._driver)) {
+				const onMaintenanceEvent = (
+					event: string,
+					callback: (finding: MaintenanceFinding) => void,
+				) => {
+					;(
+						this._driver as unknown as {
+							on(event: string, callback: unknown): void
+						}
+					).on(event, callback)
+				}
+
+				onMaintenanceEvent(
+					'maintenance finding',
+					this._onMaintenanceFinding.bind(this),
+				)
+				onMaintenanceEvent(
+					'maintenance finding updated',
+					this._onMaintenanceFindingUpdated.bind(this),
+				)
+				onMaintenanceEvent(
+					'maintenance finding resolved',
+					this._onMaintenanceFindingResolved.bind(this),
+				)
+			}
 
 			logger.info(`Connecting to ${this.cfg.port}`)
 
@@ -7309,6 +7413,42 @@ class ZwaveClient extends TypedEventEmitter<ZwaveClientEventCallbacks> {
 			this._onNodeEvent('status changed', controllerNode, status)
 		}
 		this.emit('event', EventSource.CONTROLLER, 'status changed', status)
+	}
+
+	// ---------- MAINTENANCE (REPORT FLOOD) FINDINGS ------------------
+
+	private _onMaintenanceFinding(finding: MaintenanceFinding) {
+		this.sendToSocket(socketEvents.maintenanceFinding, {
+			event: 'maintenance finding',
+			finding,
+		})
+		this.emit('event', EventSource.DRIVER, 'maintenance finding', finding)
+	}
+
+	private _onMaintenanceFindingUpdated(finding: MaintenanceFinding) {
+		this.sendToSocket(socketEvents.maintenanceFinding, {
+			event: 'maintenance finding updated',
+			finding,
+		})
+		this.emit(
+			'event',
+			EventSource.DRIVER,
+			'maintenance finding updated',
+			finding,
+		)
+	}
+
+	private _onMaintenanceFindingResolved(finding: MaintenanceFinding) {
+		this.sendToSocket(socketEvents.maintenanceFinding, {
+			event: 'maintenance finding resolved',
+			finding,
+		})
+		this.emit(
+			'event',
+			EventSource.DRIVER,
+			'maintenance finding resolved',
+			finding,
+		)
 	}
 
 	private _onBootLoaderReady() {
