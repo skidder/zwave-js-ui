@@ -48,5 +48,10 @@ let block = "overrides:\n";
 for (const name of Object.keys(overrides)) {
 	block += "  '" + name + "': '" + overrides[name] + "'\n";
 }
+block += "onlyBuiltDependencies:\n";
+// dependencies with postinstall scripts that pnpm must be allowed to build
+for (const name of ["esbuild", "@serialport/bindings-cpp", "docsify", "vue-demi"]) {
+	block += "  - '" + name + "'\n";
+}
 writeFileSync(wsPath, block + "\n" + ws);
 console.log("Wrote " + count + " overrides into pnpm-workspace.yaml");
