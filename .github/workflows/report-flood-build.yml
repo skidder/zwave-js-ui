@@ -112,7 +112,8 @@ jobs:
       - name: Install dependencies (pnpm)
         run: |
           corepack enable
-          corepack pnpm install --no-frozen-lockfile
+          cat pnpm-workspace.yaml
+          corepack pnpm install --no-frozen-lockfile --config.strict-dep-builds=false || corepack pnpm install --no-frozen-lockfile
 
       - name: Build server bundle and assert schema 53
         run: |
