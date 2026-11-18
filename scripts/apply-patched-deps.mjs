@@ -71,6 +71,20 @@ for (const entry of readdirSync(vendorDir)) {
 			if (nameToDir[dep]) {
 				pkg[field][dep] = "file:../" + nameToDir[dep];
 				changed = true;
+				continue;
+			}
+			// normalize yarn-specific protocols npm cannot resolve
+			const spec = pkg[field][dep];
+			if (spec.startsWith("patch:")) {
+				// patch:<inner>#<patchfile> -> <inner> (strip npm: prefix if present)
+				let inner = spec.slice("patch:".length).split("#")[0];
+				if (inner.startsWith("npm:")) inner = inner.slice(4);
+				pkg[field][dep] = inner;
+				changed = true;
+			} else if (spec.includes("patch:")) {
+				// e.g. "^1.2.3(patch:...)" -> range before the parenthetical
+				pkg[field][dep] = spec.split("(patch")[0];
+				changed = true;
 			}
 		}
 	}
