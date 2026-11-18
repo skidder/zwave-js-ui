@@ -51,7 +51,8 @@ jobs:
           corepack yarn install --immutable
           corepack yarn workspace @zwave-js/eslint-plugin run build
           corepack yarn build
-          corepack yarn workspaces foreach -A pack --out ../../vendor/%s/
+          mkdir -p "$GITHUB_WORKSPACE/vendor-src"
+          corepack yarn workspaces foreach -A pack --out "$GITHUB_WORKSPACE/vendor-src/%s.tgz"
 
       - name: Checkout patched server
         if: steps.vendor-cache.outputs.cache-hit != 'true'
@@ -68,23 +69,21 @@ jobs:
           corepack enable
           corepack yarn install --immutable
           corepack yarn build
-          mkdir -p ../../vendor/zwave-js-server
-          corepack yarn pack --out ../../vendor/zwave-js-server/zwave-js-server.tgz
+          corepack yarn pack --out "$GITHUB_WORKSPACE/vendor-src/zwave-js-server.tgz"
 
-      - name: Extract tarballs into package dirs
+      - name: Normalize tarballs into vendor/<name> dirs
         if: steps.vendor-cache.outputs.cache-hit != 'true'
-        working-directory: vendor
         run: |
-          # normalize: every tgz becomes vendor/<name>/ with package.json at root
-          ls
-          for tgz in $(find . -name '*.tgz'); do
-            d=$(dirname "$tgz")
-            mkdir -p "$d/_x" && tar -xzf "$tgz" -C "$d/_x"
-            name=$(node -p "require('./$d/_x/package.json').name" | tr '/' '_')
-            rm -rf "$d/_x" "$tgz"
-            mv "$d" "../vendor/$name" 2>/dev/null || true
+          mkdir -p vendor
+          for tgz in vendor-src/*.tgz; do
+            [ -e "$tgz" ] || continue
+            tmp=$(mktemp -d)
+            tar -xzf "$tgz" -C "$tmp" --strip-components=1
+            name=$(node -p "require('$tmp/package.json').name" | tr '/' '_')
+            mv "$tmp" "vendor/$name"
+            echo "vendor/$name <- $(basename $tgz)"
           done
-          find . -maxdepth 2 -name package.json
+          find vendor -maxdepth 2 -name package.json
 
       - name: Upload vendor packages
         uses: actions/upload-artifact@v4
