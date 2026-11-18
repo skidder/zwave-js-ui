@@ -49,4 +49,34 @@ for (const [name, target] of Object.entries(direct)) {
 }
 rootPkg.overrides = Object.assign({}, rootPkg.overrides ?? {}, overrides);
 writeFileSync(pkgPath, JSON.stringify(rootPkg, null, "\t") + "\n");
+// npm does not apply "overrides" inside file: dependency subtrees, so
+// rewrite each vendored package's own @zwave-js/* / zwave-js deps to sibling
+// vendor dirs before install
+const nameToDir = {};
+for (const entry of readdirSync(vendorDir)) {
+	try {
+		const pkg = JSON.parse(readFileSync(join(vendorDir, entry, "package.json"), "utf8"));
+		if (pkg.name) nameToDir[pkg.name] = entry;
+	} catch {}
+}
+for (const entry of readdirSync(vendorDir)) {
+	const p2 = join(vendorDir, entry, "package.json");
+	let pkg;
+	try { pkg = JSON.parse(readFileSync(p2, "utf8")); } catch { continue; }
+	let changed = false;
+	for (const field of ["dependencies", "peerDependencies", "devDependencies"]) {
+		if (!pkg[field]) continue;
+		for (const dep of Object.keys(pkg[field])) {
+			if (dep === pkg.name) continue;
+			if (nameToDir[dep]) {
+				pkg[field][dep] = "file:../" + nameToDir[dep];
+				changed = true;
+			}
+		}
+	}
+	if (changed) {
+		writeFileSync(p2, JSON.stringify(pkg, null, "\t") + "\n");
+		console.log("rewrote internal deps of " + entry);
+	}
+}
 console.log("Wrote " + count + " npm overrides into package.json");
