@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 /**
- * Rewrites package.json pnpm.overrides so zwave-js, the internal
+ * Writes pnpm overrides into pnpm-workspace.yaml so zwave-js, the internal
  * @zwave-js/* packages and @zwave-js/server resolve to the patched packages
- * in ./vendor instead of the npm registry.
+ * in ./vendor instead of the npm registry. pnpm >= 10 ignores the "pnpm"
+ * field in package.json; overrides live in pnpm-workspace.yaml.
  *
  * Usage: node scripts/apply-patched-deps.mjs
  * Layout expected: vendor/<sanitized-name>/package.json
  */
-import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { readdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
 const vendorDir = "vendor";
@@ -32,9 +33,20 @@ if (count === 0) {
 	process.exit(1);
 }
 
-const pkgPath = join(process.cwd(), "package.json");
-const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
-pkg.pnpm = pkg.pnpm ?? {};
-pkg.pnpm.overrides = Object.assign({}, pkg.pnpm.overrides ?? {}, overrides);
-writeFileSync(pkgPath, JSON.stringify(pkg, null, "\t") + "\n");
-console.log("Wrote " + count + " overrides into package.json");
+const wsPath = join(process.cwd(), "pnpm-workspace.yaml");
+let ws;
+if (existsSync(wsPath)) {
+	ws = readFileSync(wsPath, "utf8");
+	if (!ws.endsWith("\n")) ws += "\n";
+} else {
+	ws = "packages:\n  - 'api/*'\n";
+}
+
+// Drop any previous overrides block, then prepend a fresh one
+ws = ws.replace(/^overrides:\n(?:[ \t].*\n?)*/m, "");
+let block = "overrides:\n";
+for (const name of Object.keys(overrides)) {
+	block += "  '" + name + "': '" + overrides[name] + "'\n";
+}
+writeFileSync(wsPath, block + "\n" + ws);
+console.log("Wrote " + count + " overrides into pnpm-workspace.yaml");
