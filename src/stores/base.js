@@ -153,6 +153,9 @@ const useBaseStore = defineStore('base', {
 			supportedLRChannelConfigs: {},
 			lrChannelConfig: false,
 		},
+		// Maintenance (report flood) findings. Empty against drivers or
+		// servers that predate the report flood monitor (schema >= 53).
+		maintenanceFindings: [],
 		ui: {
 			colorScheme: loadColorScheme(settings),
 			navTabs: settings.load('navTabs', false),
@@ -230,6 +233,44 @@ const useBaseStore = defineStore('base', {
 			this.znifferState = {
 				...this.znifferState,
 				...data,
+			}
+		},
+		/**
+		 * Seed the maintenance findings from the initial socket state.
+		 * Servers that predate the report flood monitor don't send the
+		 * field at all - keep the (empty) state untouched then.
+		 */
+		initMaintenanceFindings(findings) {
+			if (Array.isArray(findings)) {
+				this.maintenanceFindings = findings
+			}
+		},
+		/**
+		 * Handle a maintenance finding event pushed by the backend:
+		 * - 'maintenance finding' / 'maintenance finding updated' upsert
+		 * - 'maintenance finding resolved' removes the finding
+		 */
+		onMaintenanceFinding({ event, finding } = {}) {
+			if (!finding || typeof finding.id !== 'string') {
+				log.warn('Invalid maintenance finding event, skipping', event)
+				return
+			}
+
+			const index = this.maintenanceFindings.findIndex(
+				(f) => f.id === finding.id,
+			)
+
+			if (event === 'maintenance finding resolved') {
+				if (index >= 0) {
+					this.maintenanceFindings.splice(index, 1)
+				}
+				return
+			}
+
+			if (index >= 0) {
+				this.maintenanceFindings.splice(index, 1, finding)
+			} else {
+				this.maintenanceFindings.push(finding)
 			}
 		},
 		setValue(valueId) {
