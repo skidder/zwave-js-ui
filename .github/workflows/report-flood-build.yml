@@ -104,6 +104,7 @@ jobs:
         with:
           pattern: vendor-*
           path: vendor
+          merge-multiple: true
 
       - name: Point package.json at the patched packages
         run: node scripts/apply-patched-deps.mjs
