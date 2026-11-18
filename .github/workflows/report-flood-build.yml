@@ -113,10 +113,13 @@ jobs:
       - name: Install dependencies (npm)
         run: |
           npm install --no-package-lock
-          npx tsc --version
+          npm install --no-save --save-exact --force typescript@5.9.3
+          node node_modules/typescript/lib/tsc.js --version
+          grep '"typescript"' package.json
 
       - name: Build server bundle and assert schema 53
         run: |
+          grep '"typescript"' package.json
           npm run build:server
           grep -E "maxSchemaVersion = 53|maxSchemaVersion.*53" api/build/lib/const.js || {
             echo "schema 53 marker missing"; exit 1; }
