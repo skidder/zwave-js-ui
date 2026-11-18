@@ -114,7 +114,7 @@ type MaintenanceDriver = {
 	applyMaintenanceSuggestion?: (
 		findingId: string,
 		nodeId: number,
-	) => Promise<void>
+	) => Promise<unknown>
 }
 
 /**

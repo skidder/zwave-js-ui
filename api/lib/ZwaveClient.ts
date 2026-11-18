@@ -1573,7 +1573,7 @@ class ZwaveClient extends TypedEventEmitter<ZwaveClientEventCallbacks> {
 			applyMaintenanceSuggestion?: (
 				findingId: string,
 				nodeId: number,
-			) => Promise<void>
+			) => Promise<unknown>
 		}
 		if (typeof impl?.applyMaintenanceSuggestion !== 'function') {
 			throw new Error(
