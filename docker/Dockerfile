@@ -63,8 +63,9 @@ RUN --mount=type=cache,target=/var/cache/apk,sharing=locked \
 
 # Cache dependency layer independently of source changes
 COPY --link package.json package-lock.json ./
+COPY --link vendor ./vendor
 RUN --mount=type=cache,target=/root/.npm \
-    npm ci
+    npm install --no-package-lock
 
 # Copy source and build (only these layers re-run on source-only changes)
 COPY --link . .
@@ -83,8 +84,9 @@ RUN --mount=type=cache,target=/var/cache/apk,sharing=locked \
         python3-dev
 
 COPY --link package.json package-lock.json ./
+COPY --link vendor ./vendor
 RUN --mount=type=cache,target=/root/.npm \
-    npm ci --omit=dev
+    npm install --omit=dev --no-package-lock
 
 # Fix issue with serialport bindings #2349
 RUN npm_config_build_from_source=true npm rebuild @serialport/bindings-cpp
