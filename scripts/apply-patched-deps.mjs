@@ -92,9 +92,9 @@ for (const entry of readdirSync(vendorDir)) {
 			}
 		}
 	}
-	if (changed) {
-		writeFileSync(p2, JSON.stringify(pkg, null, "\t") + "\n");
-		console.log("rewrote internal deps of " + entry);
-	}
+	// vendored tarballs are prebuilt: never let npm run their lifecycle scripts
+	pkg.scripts = {};
+	writeFileSync(p2, JSON.stringify(pkg, null, "\t") + "\n");
+	if (changed) console.log("rewrote internal deps of " + entry);
 }
 console.log("Wrote " + count + " npm overrides into package.json");
