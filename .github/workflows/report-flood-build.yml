@@ -49,6 +49,7 @@ jobs:
         run: |
           corepack enable
           corepack yarn install --immutable
+          corepack yarn workspace @zwave-js/eslint-plugin run build
           corepack yarn build
           corepack yarn workspaces foreach -A pack --out ../../vendor/%s/
 
