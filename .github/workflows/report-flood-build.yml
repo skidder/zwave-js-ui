@@ -33,7 +33,7 @@ jobs:
         id: vendor-cache
         with:
           path: vendor
-          key: vendor-v2-${{ steps.shas.outputs.key }}
+          key: vendor-v3-${{ steps.shas.outputs.key }}
 
       - name: Checkout patched driver
         if: steps.vendor-cache.outputs.cache-hit != 'true'
